@@ -4,3 +4,7 @@ Revision history for Perl extension Win32::IPHelper.
 	- original version; created by h2xs 1.21 with options
 		-AX -n Win32::IPHelper
 
+0.02  Fri Jan 31 18:33:25 2003
+	- moved Win32::API constructors in module global namespace
+		to fix a handler leakage
+

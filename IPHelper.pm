@@ -29,7 +29,16 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
+
+my $AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
+my $DeleteIPAddress = new Win32::API ('Iphlpapi', 'DeleteIPAddress', ['N'], 'N') or croak 'can\'t find DeleteIPAddress() function';
+my $GetIfEntry = new Win32::API ('Iphlpapi', 'GetIfEntry', ['P'], 'N') or croak 'can\'t find GetIfEntry() function';
+my $GetAdaptersInfo = new Win32::API ('Iphlpapi', 'GetAdaptersInfo', ['P', 'P'], 'N') or croak 'can\'t find GetAdaptersInfo() function';
+my $GetInterfaceInfo = new Win32::API ('Iphlpapi', 'GetInterfaceInfo', ['P', 'P'], 'N') or croak 'can\'t find GetInterfaceInfo() function';
+my $GetAdapterIndex = new Win32::API ('Iphlpapi', 'GetAdapterIndex', ['P', 'P'], 'N') or croak 'can\'t find GetAdapterIndex() function';
+my $IpReleaseAddress = new Win32::API ('Iphlpapi', 'IpReleaseAddress', ['P'], 'N') or croak 'can\'t find IpReleaseAddress() function';
+my $IpRenewAddress = new Win32::API ('Iphlpapi', 'IpRenewAddress', ['P'], 'N') or croak 'can\'t find IpRenewAddress() function';
 
 
 # Preloaded methods go here.
@@ -113,7 +122,7 @@ sub AddIPAddress
 	my $NTEContext = shift;
 	my $NTEInstance = shift;
 
-	my $AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
+#	$AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
 	
 	# initialize area for the NTE data
 	$$NTEContext = pack("L", 0);
@@ -171,7 +180,7 @@ sub DeleteIPAddress
 
 	my $NTEContext = pack("L", shift);
 
-	my $DeleteIPAddress = new Win32::API ('Iphlpapi', 'DeleteIPAddress', ['N'], 'N') or croak 'can\'t find DeleteIPAddress() function';
+#	$DeleteIPAddress = new Win32::API ('Iphlpapi', 'DeleteIPAddress', ['N'], 'N') or croak 'can\'t find DeleteIPAddress() function';
 
 	# function call
 	my $ret = $DeleteIPAddress->Call(unpack('L', $NTEContext));
@@ -225,7 +234,7 @@ sub GetIfEntry
 	my $IfIndex = shift;
 	my $buffer = shift;
 
-	my $GetIfEntry = new Win32::API ('Iphlpapi', 'GetIfEntry', ['P'], 'N') or croak 'can\'t find GetIfEntry() function';
+#	$GetIfEntry = new Win32::API ('Iphlpapi', 'GetIfEntry', ['P'], 'N') or croak 'can\'t find GetIfEntry() function';
 
 	my $lpBuffer;
 	$lpBuffer .= pack("C@".MAX_INTERFACE_NAME_LEN*2, 0);
@@ -288,7 +297,7 @@ sub GetAdaptersInfo
 	my $buffer = shift;
 	my $base_size = 4;
 	
-	my $GetAdaptersInfo = new Win32::API ('Iphlpapi', 'GetAdaptersInfo', ['P', 'P'], 'N') or croak 'can\'t find GetAdaptersInfo() function';
+#	$GetAdaptersInfo = new Win32::API ('Iphlpapi', 'GetAdaptersInfo', ['P', 'P'], 'N') or croak 'can\'t find GetAdaptersInfo() function';
 
 	# initialize area for the buffer size
 	my $lpSize = pack("L", 0);
@@ -398,7 +407,7 @@ sub GetInterfaceInfo
 	my $buffer = shift;
 	my $base_size = 4;
 	
-	my $GetInterfaceInfo = new Win32::API ('Iphlpapi', 'GetInterfaceInfo', ['P', 'P'], 'N') or croak 'can\'t find GetInterfaceInfo() function';
+#	$GetInterfaceInfo = new Win32::API ('Iphlpapi', 'GetInterfaceInfo', ['P', 'P'], 'N') or croak 'can\'t find GetInterfaceInfo() function';
 
 	# initialize area for the buffer size
 	my $lpBuffer = pack("L@".$base_size, 0);
@@ -498,7 +507,7 @@ sub GetAdapterIndex
 	# prepare the buffer for IfIndex
 	$$IfIndex = pack('L', 0);
 	
-	my $GetAdapterIndex = new Win32::API ('Iphlpapi', 'GetAdapterIndex', ['P', 'P'], 'N') or croak 'can\'t find GetAdapterIndex() function';
+#	$GetAdapterIndex = new Win32::API ('Iphlpapi', 'GetAdapterIndex', ['P', 'P'], 'N') or croak 'can\'t find GetAdapterIndex() function';
 	
 	# function call
 	my $ret = $GetAdapterIndex->Call(_ToUnicodeSz('\DEVICE\TCPIP_'.$$AdapterName), $$IfIndex);
@@ -551,7 +560,7 @@ sub IpReleaseAddress
 	my $ip_adapter_index_map = pack("L", $$AdapterInfo{'Index'});
 	$ip_adapter_index_map .= pack("Z*@".(2 * MAX_ADAPTER_NAME), _ToUnicodeSz($$AdapterInfo{'Name'})); 
 	
-	my $IpReleaseAddress = new Win32::API ('Iphlpapi', 'IpReleaseAddress', ['P'], 'N') or croak 'can\'t find IpReleaseAddress() function';
+#	$IpReleaseAddress = new Win32::API ('Iphlpapi', 'IpReleaseAddress', ['P'], 'N') or croak 'can\'t find IpReleaseAddress() function';
 	
 	# function call
 	my $ret = $IpReleaseAddress->Call($ip_adapter_index_map);
@@ -600,7 +609,7 @@ sub IpRenewAddress
 	my $ip_adapter_index_map = pack("L", $$AdapterInfo{'Index'});
 	$ip_adapter_index_map .= pack("Z*@".(2 * MAX_ADAPTER_NAME), _ToUnicodeSz($$AdapterInfo{'Name'})); 
 	
-	my $IpRenewAddress = new Win32::API ('Iphlpapi', 'IpRenewAddress', ['P'], 'N') or croak 'can\'t find IpRenewAddress() function';
+#	$IpRenewAddress = new Win32::API ('Iphlpapi', 'IpRenewAddress', ['P'], 'N') or croak 'can\'t find IpRenewAddress() function';
 	
 	# function call
 	my $ret = $IpRenewAddress->Call($ip_adapter_index_map);

@@ -1,4 +1,4 @@
-Win32/IPHelper version 0.01
+Win32/IPHelper version 0.02
 ===========================
 
 This module is an interface to Win32 IP Helper functions and data structures,
