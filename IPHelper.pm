@@ -29,7 +29,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 my $GetProcessHeap = new Win32::API ('Kernel32', 'GetProcessHeap', [], 'N') or croak 'can\'t find GetProcessHeap() function';
 my $AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
@@ -43,8 +43,8 @@ my $IpRenewAddress = new Win32::API ('Iphlpapi', 'IpRenewAddress', ['P'], 'N') o
 my $GetTcpTable = new Win32::API ('Iphlpapi', 'GetTcpTable', ['P', 'P', 'N'], 'N') or croak 'can\'t find GetTcpTable() function';
 my $GetUdpTable = new Win32::API ('Iphlpapi', 'GetUdpTable', ['P', 'P', 'N'], 'N') or croak 'can\'t find GetUdpTable() function';
 # UNDOCUMENTED # Available only on Windows XP/2003
-my $AllocateAndGetTcpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetTcpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N') or croak 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
-my $AllocateAndGetUdpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetUdpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N') or croak 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
+my $AllocateAndGetTcpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetTcpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
+my $AllocateAndGetUdpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetUdpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
 
 # Preloaded methods go here.
 
@@ -735,7 +735,8 @@ sub AllocateAndGetTcpExTableFromStack
 {
 	unless($AllocateAndGetTcpExTableFromStack)
 	{
-		croak 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
+		carp 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
+		return;
 	}
 
 	if(scalar(@_) ne 2)
@@ -917,7 +918,8 @@ sub AllocateAndGetUdpExTableFromStack
 {
 	unless($AllocateAndGetUdpExTableFromStack)
 	{
-		croak 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
+		carp 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
+		return;
 	}
 
 	if(scalar(@_) ne 2)

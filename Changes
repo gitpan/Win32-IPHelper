@@ -13,3 +13,5 @@ Revision history for Perl extension Win32::IPHelper.
 	- added _GetProcessHeap() private function to support AllocateAndGetTcpExTableFromStack() and AllocateAndGetUdpExTableFromStack()
 	- modified _shiftunpack() private function to support multiple values decoding in a single call
 
+0.04  Fri Mar 11 15:54:00 2005
+	- fixed AllocateAndGetTcpExTableFromStack() and AllocateAndGetUdpExTableFromStack() functions, no more failire on "nmake test" under Windows 2000 and earlier platforms.
