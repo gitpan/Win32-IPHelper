@@ -35,6 +35,10 @@
 		<LI><A HREF="#deleteipaddress($ntecontext)"><CODE>DeleteIPAddress($NTEContext)</CODE></A></LI>
 		<LI><A HREF="#ipreleaseaddress(\%adapterinfo)"><CODE>IpReleaseAddress(\%AdapterInfo)</CODE></A></LI>
 		<LI><A HREF="#iprenewaddress(\%adapterinfo)"><CODE>IpRenewAddress(\%AdapterInfo)</CODE></A></LI>
+		<LI><A HREF="#gettcptable(\@tcp_table,$border)"><CODE>GetTcpTable(\@TCP_TABLE,$bOrder)</CODE></A></LI>
+		<LI><A HREF="#allocateandgettcpextablefromstack(\@tcp_ex_table,$border)"><CODE>AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE,$bOrder)</CODE></A></LI>
+		<LI><A HREF="#getudptable(\@udp_table,$border)"><CODE>GetUdpTable(\@UDP_TABLE,$bOrder)</CODE></A></LI>
+		<LI><A HREF="#allocateandgetudpextablefromstack(\@udp_ex_table,$border)"><CODE>AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE,$bOrder)</CODE></A></LI>
 	</UL>
 
 	<LI><A HREF="#credits">CREDITS</A></LI>
@@ -67,6 +71,14 @@
  $ret = Win32::IPHelper::IpReleaseAddress(\%AdapterInfo);</PRE>
 <PRE>
  $ret = Win32::IPHelper::IpRenewAddress(\%AdapterInfo);</PRE>
+<PRE>
+ $ret = Win32::IPHelper::GetTcpTable(\@TCP_TABLE, $bOrder);</PRE>
+<PRE>
+ $ret = Win32::IPHelper::AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE, $bOrder);</PRE>
+<PRE>
+ $ret = Win32::IPHelper::GetUdpTable(\@UDP_TABLE, $bOrder);</PRE>
+<PRE>
+ $ret = Win32::IPHelper::AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE, $bOrder);</PRE>
 <P>
 <HR>
 <H1><A NAME="description">DESCRIPTION</A></H1>
@@ -131,9 +143,9 @@ For more specific information about which operating systems support a particular
 <P><STRONG>Remarks</STRONG></P>
 <P>The GetAdaptersInfo and GetInterfaceInfo functions do not return information about the loopback interface</P>
 <P><STRONG>Requirements</STRONG></P>
-<P>Client: Included in Windows XP, Windows 2000 Professional, Windows Me, Windows 98. 
-Server: Included in Windows .NET Server 2003, Windows 2000 Server. 
-Header: Declared in Iphlpapi.h. 
+<P>Client: Included in Windows XP, Windows 2000 Professional, Windows Me, Windows 98.
+Server: Included in Windows .NET Server 2003, Windows 2000 Server.
+Header: Declared in Iphlpapi.h.
 Library: Iphlpapi.dll.</P>
 <P>
 <H2><A NAME="getadaptersinfo(\@ip_adapter_info)"><CODE>GetAdaptersInfo(\@IP_ADAPTER_INFO)</CODE></A></H2>
@@ -326,10 +338,8 @@ Library: Iphlpapi.dll.</P>
 <PRE>
   if($ret == 0)
   {
-    my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };
-</PRE>
+    my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };</PRE>
 <PRE>
-
     $ret = Win32::IPHelper::IpReleaseAddress(\%AdapterInfo);</PRE>
 <PRE>
     if($ret == 0)
@@ -365,10 +375,8 @@ Library: Iphlpapi.dll.</P>
 <PRE>
   if($ret == 0)
   {
-    my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };
-</PRE>
+    my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };</PRE>
 <PRE>
-
     $ret = Win32::IPHelper::IpRenewAddress(\%AdapterInfo);</PRE>
 <PRE>
     if($ret == 0)
@@ -391,6 +399,126 @@ Library: Iphlpapi.dll.</P>
 <P>Client: Included in Windows XP, Windows 2000 Professional, Windows Me, Windows 98.
 Server: Included in Windows .NET Server 2003, Windows 2000 Server.
 Header: Declared in Iphlpapi.h.
+Library: Iphlpapi.dll.</P>
+<P>
+<H2><A NAME="gettcptable(\@tcp_table,$border)"><CODE>GetTcpTable(\@TCP_TABLE,$bOrder)</CODE></A></H2>
+<P>The GetTcpTable function retrieves the TCP connection table.</P>
+<P><STRONG>Example</STRONG></P>
+<PRE>
+  use Win32::IPHelper;
+  use Data::Dumper;</PRE>
+<PRE>
+  my @TCP_TABLE;
+  my $bOrder = 1;</PRE>
+<PRE>
+  $ret = Win32::IPHelper::GetTcpTable(\@TCP_TABLE, $bOrder);</PRE>
+<PRE>
+  if($ret == 0)
+  {
+    print Data::Dumper-&gt;Dump([\@TCP_TABLE], [qw(TCP_TABLE)]);
+  }
+  else
+  {
+    printf &quot;GetTcpTable() error %u: %s\n&quot;, $ret, Win32::FormatMessage($ret);
+  }</PRE>
+<P><STRONG>Return Values</STRONG></P>
+<P>If the function succeeds, the return value is 0.</P>
+<P>If the function fails, the error code can be decoded with Win32::FormatMessage($ret).</P>
+<P><STRONG>Requirements</STRONG></P>
+<P>Client: Requires Windows XP, Windows 2000 Professional, Windows NT Workstation 4.0 SP4 and later, Windows Me, or Windows 98.
+Server: Requires Windows Server 2003, Windows 2000 Server, or Windows NT Server 4.0 SP4 and later.
+Header: Declared in Iphlpapi.h.
+Library: Iphlpapi.dll.</P>
+<P>
+<H2><A NAME="allocateandgettcpextablefromstack(\@tcp_ex_table,$border)"><CODE>AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE,$bOrder)</CODE></A></H2>
+<P>The AllocateAndGetTcpExTableFromStack function retrieves the TCP connection table with the additional ProcessId.</P>
+<P><STRONG>Example</STRONG></P>
+<PRE>
+  use Win32::IPHelper;
+  use Data::Dumper;</PRE>
+<PRE>
+  my @TCP_EX_TABLE;
+  my $bOrder = 1;</PRE>
+<PRE>
+  $ret = Win32::IPHelper::AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE, $bOrder);</PRE>
+<PRE>
+  if($ret == 0)
+  {
+    print Data::Dumper-&gt;Dump([\@TCP_EX_TABLE], [qw(TCP_EX_TABLE)]);
+  }
+  else
+  {
+    printf &quot;AllocateAndGetTcpExTableFromStack() error %u: %s\n&quot;, $ret, Win32::FormatMessage($ret);
+  }</PRE>
+<P><STRONG>Return Values</STRONG></P>
+<P>If the function succeeds, the return value is 0.</P>
+<P>If the function fails, the error code can be decoded with Win32::FormatMessage($ret).</P>
+<P><STRONG>Remarks</STRONG></P>
+<P>The AllocateAndGetTcpExTableFromStack function is undocumented and is available only in Windows XP and Windows Server 2003.</P>
+<P><STRONG>Requirements</STRONG></P>
+<P>Client: Requires Windows XP.
+Server: Requires Windows Server 2003.
+Header: Undeclared.
+Library: Iphlpapi.dll.</P>
+<P>
+<H2><A NAME="getudptable(\@udp_table,$border)"><CODE>GetUdpTable(\@UDP_TABLE,$bOrder)</CODE></A></H2>
+<P>The GetUdpTable function retrieves the User Datagram Protocol (UDP) listener table.</P>
+<P><STRONG>Example</STRONG></P>
+<PRE>
+  use Win32::IPHelper;
+  use Data::Dumper;</PRE>
+<PRE>
+  my @UDP_TABLE;
+  my $bOrder = 1;</PRE>
+<PRE>
+  $ret = Win32::IPHelper::GetTcpTable(\@UDP_TABLE, $bOrder);</PRE>
+<PRE>
+  if($ret == 0)
+  {
+    print Data::Dumper-&gt;Dump([\@UDP_TABLE], [qw(UDP_TABLE)]);
+  }
+  else
+  {
+    printf &quot;GetUdpTable() error %u: %s\n&quot;, $ret, Win32::FormatMessage($ret);
+  }</PRE>
+<P><STRONG>Return Values</STRONG></P>
+<P>If the function succeeds, the return value is 0.</P>
+<P>If the function fails, the error code can be decoded with Win32::FormatMessage($ret).</P>
+<P><STRONG>Requirements</STRONG></P>
+<P>Client: Requires Windows XP, Windows 2000 Professional, Windows NT Workstation 4.0 SP4 and later, Windows Me, or Windows 98.
+Server: Requires Windows Server 2003, Windows 2000 Server, or Windows NT Server 4.0 SP4 and later.
+Header: Declared in Iphlpapi.h.
+Library: Iphlpapi.dll.</P>
+<P>
+<H2><A NAME="allocateandgetudpextablefromstack(\@udp_ex_table,$border)"><CODE>AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE,$bOrder)</CODE></A></H2>
+<P>The AllocateAndGetTcpExTableFromStack function retrieves the User Datagram Protocol (UDP) listener table with the additional ProcessId.</P>
+<P><STRONG>Example</STRONG></P>
+<PRE>
+  use Win32::IPHelper;
+  use Data::Dumper;</PRE>
+<PRE>
+  my @TCP_EX_TABLE;
+  my $bOrder = 1;</PRE>
+<PRE>
+  $ret = Win32::IPHelper::AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE, $bOrder);</PRE>
+<PRE>
+  if($ret == 0)
+  {
+    print Data::Dumper-&gt;Dump([\@UDP_EX_TABLE], [qw(UDP_EX_TABLE)]);
+  }
+  else
+  {
+    printf &quot;AllocateAndGetUdpExTableFromStack() error %u: %s\n&quot;, $ret, Win32::FormatMessage($ret);
+  }</PRE>
+<P><STRONG>Return Values</STRONG></P>
+<P>If the function succeeds, the return value is 0.</P>
+<P>If the function fails, the error code can be decoded with Win32::FormatMessage($ret).</P>
+<P><STRONG>Remarks</STRONG></P>
+<P>The AllocateAndGetUdpExTableFromStack function is undocumented and is available only in Windows XP and Windows Server 2003.</P>
+<P><STRONG>Requirements</STRONG></P>
+<P>Client: Requires Windows XP.
+Server: Requires Windows Server 2003.
+Header: Undeclared.
 Library: Iphlpapi.dll.</P>
 <P>
 <HR>

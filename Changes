@@ -8,3 +8,8 @@ Revision history for Perl extension Win32::IPHelper.
 	- moved Win32::API constructors in module global namespace
 		to fix a handler leakage
 
+0.03  Fri Aug 6 17:30:00 2004
+	- added GetTcpTable(), GetUdpTable(), AllocateAndGetTcpExTableFromStack() and AllocateAndGetUdpExTableFromStack() functions
+	- added _GetProcessHeap() private function to support AllocateAndGetTcpExTableFromStack() and AllocateAndGetUdpExTableFromStack()
+	- modified _shiftunpack() private function to support multiple values decoding in a single call
+
