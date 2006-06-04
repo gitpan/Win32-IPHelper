@@ -15,3 +15,6 @@ Revision history for Perl extension Win32::IPHelper.
 
 0.04  Fri Mar 11 15:54:00 2005
 	- fixed AllocateAndGetTcpExTableFromStack() and AllocateAndGetUdpExTableFromStack() functions, no more failire on "nmake test" under Windows 2000 and earlier platforms.
+
+0.05  Tue May 23 07:25:00 2006
+	- added GetNetworkParams() and _FIXED_INFO(), thanks to Hanno Stock (HANSTO).

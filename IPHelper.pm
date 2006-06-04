@@ -22,14 +22,14 @@ our @ISA = qw(Exporter);
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
 our %EXPORT_TAGS = (
-	'all' => [ qw( AddIPAddress DeleteIPAddress GetIfEntry GetAdaptersInfo GetInterfaceInfo GetAdapterIndex IpReleaseAddress IpRenewAddress GetTcpTable GetUdpTable ) ]
+	'all' => [ qw( AddIPAddress DeleteIPAddress GetIfEntry GetAdaptersInfo GetInterfaceInfo GetAdapterIndex IpReleaseAddress IpRenewAddress GetTcpTable GetUdpTable GetNetworkParams) ]
 );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 my $GetProcessHeap = new Win32::API ('Kernel32', 'GetProcessHeap', [], 'N') or croak 'can\'t find GetProcessHeap() function';
 my $AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
@@ -42,9 +42,11 @@ my $IpReleaseAddress = new Win32::API ('Iphlpapi', 'IpReleaseAddress', ['P'], 'N
 my $IpRenewAddress = new Win32::API ('Iphlpapi', 'IpRenewAddress', ['P'], 'N') or croak 'can\'t find IpRenewAddress() function';
 my $GetTcpTable = new Win32::API ('Iphlpapi', 'GetTcpTable', ['P', 'P', 'N'], 'N') or croak 'can\'t find GetTcpTable() function';
 my $GetUdpTable = new Win32::API ('Iphlpapi', 'GetUdpTable', ['P', 'P', 'N'], 'N') or croak 'can\'t find GetUdpTable() function';
+my $GetNetworkParams = new Win32::API ('Iphlpapi', 'GetNetworkParams', ['P','P'], 'N') or croak 'can\'t find GetNetworkParams() function';;
 # UNDOCUMENTED # Available only on Windows XP/2003
 my $AllocateAndGetTcpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetTcpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
 my $AllocateAndGetUdpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetUdpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
+
 
 # Preloaded methods go here.
 
@@ -67,6 +69,10 @@ use enum qw(
 	:MAXLEN_
 		IFDESCR=256
 		PHYSADDR=8
+  :MAX_
+    HOSTNAME_LEN=128
+    DOMAIN_NAME_LEN=128
+    SCOPE_ID_LEN=256
 );
 
 # TCP States
@@ -970,6 +976,82 @@ sub AllocateAndGetUdpExTableFromStack
 }
 
 
+#######################################################################
+# Win32::IPHelper::GetNetworkParams()
+#
+# The GetNetworkParams function retrieves adapter information for the
+# local computer.
+#
+#######################################################################
+# Usage:
+#	$ret = GetNetworkParams(\%FIXED_INFO);
+#
+# Output:
+#	$ret = 0 for success, a number for error
+#
+# Input:
+#	\%hash = reference to the hash to be filled with decoded data
+#
+#######################################################################
+# function GetNetworkParams
+#
+# The GetNetworkParams function retrieves network
+# parameters for the local computer.
+#
+# DWORD GetNetworkParams(
+#   PFIXED_INFO pFixedInfo,
+#   PULONG pOutBufLen
+# );
+#
+#######################################################################
+sub GetNetworkParams
+{
+	if(scalar(@_) ne 1)
+	{
+		croak 'Usage: GetNetworkParams(\\\%FIXED_INFO)';
+	}
+
+	my $buffer = shift;
+	my $base_size = 2048;
+
+	# initialize area for the buffer size
+	my $lpBuffer = pack("L@".$base_size, 0);
+	my $lpSize = pack("L", $base_size);
+
+	# first call just to read the size
+	my $ret = $GetNetworkParams->Call($lpBuffer, $lpSize);
+
+	# check returned value...
+	if($ret != NO_ERROR)
+	{
+		if($ret == ERROR_BUFFER_OVERFLOW)
+		{
+			# initialize area for the buffer content
+			$base_size = unpack("L", $lpSize);
+			$lpBuffer = pack("L@".$base_size, 0);
+
+			# second call to read data
+			$ret = $GetNetworkParams->Call($lpBuffer, $lpSize);
+			if($ret != NO_ERROR)
+			{
+				$DEBUG and carp sprintf "The call to GetNetworkParams() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
+				return $ret;
+			}
+		}
+		else
+		{
+			$DEBUG and carp sprintf "The call to GetNetworkParams() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
+			return $ret;
+		}
+	}
+
+	# decode data into the supplied buffer area
+	(undef, %$buffer) = _FIXED_INFO(\$lpBuffer, 0);
+
+	return 0;
+}
+
+
 ####################################
 # PRIVATE Functions (not exported) #
 ####################################
@@ -1310,6 +1392,63 @@ sub _IP_INTERFACE_INFO
 	return ($pos, %hash);
 }
 
+#######################################################################
+# _FIXED_INFO()
+#
+# Decodes an FIXED_INFO data structure and returns data
+# into a Perl array
+#
+#######################################################################
+# Usage:
+#	($pos, %hash) = _FIXED_INFO(\$buffer, $position);
+#
+# Output:
+#	$pos   = new position in buffer (for the next call)
+#	%hash = the decoded data structure
+#
+# Input:
+#	\$buffer = reference to the buffer to decode
+#	$position = first byte to decode
+#
+#######################################################################
+# FIXED_INFO structure for GetNetworkParams
+#
+# typedef struct {
+#   char HostName[MAX_HOSTNAME_LEN + 4];
+#   char DomainName[MAX_DOMAIN_NAME_LEN + 4];
+#   PIP_ADDR_STRING CurrentDnsServer;
+#   IP_ADDR_STRING DnsServerList;
+#   UINT NodeType;
+#   char ScopeId[MAX_SCOPE_ID_LEN + 4];
+#   UINT EnableRouting;
+#   UINT EnableProxy;
+#   UINT EnableDns;
+# } FIXED_INFO, 
+#  *PFIXED_INFO;
+#
+#######################################################################
+sub _FIXED_INFO{
+	my ($buffer, $pos) = @_;
+	my %hash;
+	
+	($pos, $hash{'HostName'}) = _shiftunpack($buffer, $pos, MAX_HOSTNAME_LEN + 4, "Z".(MAX_HOSTNAME_LEN + 4));
+	($pos, $hash{'DomainName'}) = _shiftunpack($buffer, $pos, MAX_DOMAIN_NAME_LEN + 4, "Z".(MAX_DOMAIN_NAME_LEN + 4));
+	
+	my $CurrentDnsServer;
+	($pos, $CurrentDnsServer) = _shiftunpack($buffer, $pos, 4, "P40");
+	if($CurrentDnsServer)
+	{
+    @{ $hash{'CurrentDnsServer'} } = _IP_ADDR_STRING(\$CurrentDnsServer, 0);
+  }
+	($pos, @{ $hash{'DnsServersList'} }) = _IP_ADDR_STRING($buffer, $pos);
+	($pos, $hash{'NodeType'}) = _shiftunpack($buffer, $pos, 4, "L");
+	($pos, $hash{'ScopeId'}) = _shiftunpack($buffer, $pos, MAX_SCOPE_ID_LEN + 4, "Z".(MAX_SCOPE_ID_LEN + 4));
+	($pos, $hash{'EnableRouting'}) = _shiftunpack($buffer, $pos, 4, "L");
+	($pos, $hash{'EnableProxy'}) = _shiftunpack($buffer, $pos, 4, "L");
+	($pos, $hash{'EnableDns'}) = _shiftunpack($buffer, $pos, 4, "L");
+	
+	return ($pos, %hash);
+}
 
 #######################################################################
 # _shiftunpack
@@ -2072,13 +2211,50 @@ Server: Requires Windows Server 2003.
 Header: Undeclared.
 Library: Iphlpapi.dll.
 
+=head2 GetNetworkParams(\%FIXED_INFO)
+
+The GetNetworkParams function retrieves network parameters for the local computer.
+
+B<Example>
+
+  use Win32::IPHelper;
+  use Data::Dumper;
+
+  my %FIXED_INFO;
+
+  $ret = Win32::IPHelper::GetNetworkParams(\%FIXED_INFO);
+
+  if($ret == 0)
+  {
+    print Data::Dumper->Dump([\%FIXED_INFO], [qw(FIXED_INFO)]);
+  }
+  else
+  {
+    printf "GetNetworkParams() error %u: %s\n", $ret, Win32::FormatMessage($ret);
+  }
+
+B<Return Values>
+
+If the function succeeds, the return value is 0.
+
+If the function fails, the error code can be decoded with Win32::FormatMessage($ret).
+
+B<Requirements>
+
+Client: Requires Windows XP, Windows 2000 Professional, Windows Me or Windows 98.
+Server: Requires Windows Server 2003 or Windows 2000 Server.
+Header: Undeclared.
+Library: Iphlpapi.dll.
+
 =head1 CREDITS
 
 Thanks to Aldo Calpini for the powerful Win32::API module that makes this thing work.
 
+Thanks to Hanno Stock (HANSTO) for the GetNetworkParams and _FIXED_INFO wrapper and helper.
+
 =head1 AUTHOR
 
-Luigino Masarati, E<lt>lmasarati@hotmail.comE<gt>
+Luigino Masarati, E<lt>lmasarati at hotmail.comE<gt>
 
 =cut
 
