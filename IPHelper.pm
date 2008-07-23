@@ -22,14 +22,24 @@ our @ISA = qw(Exporter);
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
 our %EXPORT_TAGS = (
-	'all' => [ qw( AddIPAddress DeleteIPAddress GetIfEntry GetAdaptersInfo GetInterfaceInfo GetAdapterIndex IpReleaseAddress IpRenewAddress GetTcpTable GetUdpTable GetNetworkParams) ]
+	'all' => [ qw( 
+		AddIPAddress DeleteIPAddress
+		GetIfEntry
+		GetAdaptersInfo
+		GetInterfaceInfo
+		GetAdapterIndex
+		IpReleaseAddress IpRenewAddress
+		GetTcpTable AllocateAndGetTcpExTableFromStack GetExtendedTcpTable GetTcpTableAuto
+		GetUdpTable AllocateAndGetUdpExTableFromStack GetExtendedUdpTable GetUdpTableAuto
+		GetNetworkParams
+	) ]
 );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 my $GetProcessHeap = new Win32::API ('Kernel32', 'GetProcessHeap', [], 'N') or croak 'can\'t find GetProcessHeap() function';
 my $AddIPAddress = new Win32::API ('Iphlpapi', 'AddIPAddress', ['N', 'N', 'N', 'P', 'P'], 'N') or croak 'can\'t find AddIPAddress() function';
@@ -46,12 +56,16 @@ my $GetNetworkParams = new Win32::API ('Iphlpapi', 'GetNetworkParams', ['P','P']
 # UNDOCUMENTED # Available only on Windows XP/2003
 my $AllocateAndGetTcpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetTcpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
 my $AllocateAndGetUdpExTableFromStack = new Win32::API ('Iphlpapi', 'AllocateAndGetUdpExTableFromStack', ['P', 'N', 'N', 'N', 'N'], 'N');# or croak 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
+# Available only on Windows Server 2003 SP1, Server 2008, XP SP2, Vista
+my $GetExtendedTcpTable = new Win32::API ('Iphlpapi', 'GetExtendedTcpTable', ['P', 'P', 'N', 'N', 'N', 'N'], 'N');
+my $GetExtendedUdpTable = new Win32::API ('Iphlpapi', 'GetExtendedUdpTable', ['P', 'P', 'N', 'N', 'N', 'N'], 'N');
 
 
 # Preloaded methods go here.
 
 use enum qw(
 	NO_ERROR=0
+	TABLE_SIZE=2048
 	:MAX_INTERFACE_
 		NAME_LEN=256
 	:MAX_ADAPTER_
@@ -73,6 +87,13 @@ use enum qw(
     HOSTNAME_LEN=128
     DOMAIN_NAME_LEN=128
     SCOPE_ID_LEN=256
+	:UDP_TABLE_
+		OWNER_PID=1
+	:TCP_TABLE_
+		OWNER_PID_ALL=5
+	:AF_
+		INET=2
+		INET6=23
 );
 
 # TCP States
@@ -137,7 +158,7 @@ our $DEBUG = 0;
 #######################################################################
 sub AddIPAddress
 {
-	if(scalar(@_) ne 5)
+	if (scalar(@_) ne 5)
 	{
 		croak 'Usage: AddIPAddress(\$Address, \$IpMask, \$IfIndex, \\\$NTEContext, \\\$NTEInstance)';
 	}
@@ -158,7 +179,7 @@ sub AddIPAddress
 	# function call
 	my $ret = $AddIPAddress->Call($Address, $IpMask, $IfIndex, $$NTEContext, $$NTEInstance);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to AddIPAddress() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 	}
@@ -200,7 +221,7 @@ sub AddIPAddress
 #######################################################################
 sub DeleteIPAddress
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: DeleteIPAddress(\$NTEContext)';
 	}
@@ -212,7 +233,7 @@ sub DeleteIPAddress
 	# function call
 	my $ret = $DeleteIPAddress->Call(unpack('L', $NTEContext));
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to DeleteIPAddress() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 	}
@@ -253,7 +274,7 @@ sub DeleteIPAddress
 #######################################################################
 sub GetIfEntry
 {
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: GetIfEntry(\$IfIndex, \\\%pIfRow)';
 	}
@@ -274,7 +295,7 @@ sub GetIfEntry
 	# first call just to read the size
 	my $ret = $GetIfEntry->Call($lpBuffer);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to GetIfEntry() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 	}
@@ -316,7 +337,7 @@ sub GetIfEntry
 #######################################################################
 sub GetAdaptersInfo
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: GetAdaptersInfo(\\\@IP_ADAPTER_INFO)';
 	}
@@ -334,9 +355,9 @@ sub GetAdaptersInfo
 	my $ret = $GetAdaptersInfo->Call($lpBuffer, $lpSize);
 
 	# check returned value...
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
-		if($ret == ERROR_BUFFER_OVERFLOW)
+		if ($ret == ERROR_BUFFER_OVERFLOW)
 		{
 			# initialize area for the buffer content
 			$base_size = unpack("L", $lpSize);
@@ -344,7 +365,7 @@ sub GetAdaptersInfo
 
 			# second call to read data
 			$ret = $GetAdaptersInfo->Call($lpBuffer, $lpSize);
-			if($ret != NO_ERROR)
+			if ($ret != NO_ERROR)
 			{
 				$DEBUG and carp sprintf "The call to GetAdaptersInfo() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 				return $ret;
@@ -394,7 +415,7 @@ sub GetAdaptersInfo
 #######################################################################
 sub GetInterfaceInfo
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: GetInterfaceInfo(\\\%IP_INTERFACE_INFO)';
 	}
@@ -412,9 +433,9 @@ sub GetInterfaceInfo
 	my $ret = $GetInterfaceInfo->Call($lpBuffer, $lpSize);
 
 	# check returned value...
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
-		if($ret == ERROR_INSUFFICIENT_BUFFER)
+		if ($ret == ERROR_INSUFFICIENT_BUFFER)
 		{
 			# initialize area for the buffer content
 			$base_size = unpack("L", $lpSize);
@@ -422,7 +443,7 @@ sub GetInterfaceInfo
 
 			# second call to read data
 			$ret = $GetInterfaceInfo->Call($lpBuffer, $lpSize);
-			if($ret != NO_ERROR)
+			if ($ret != NO_ERROR)
 			{
 				$DEBUG and carp sprintf "The call to GetInterfaceInfo() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 				return $ret;
@@ -469,7 +490,7 @@ sub GetInterfaceInfo
 #######################################################################
 sub GetAdapterIndex
 {
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: GetAdapterIndex(\\\$AdapterName, \\\$IfIndex)';
 	}
@@ -485,7 +506,7 @@ sub GetAdapterIndex
 	# function call
 	my $ret = $GetAdapterIndex->Call(_ToUnicodeSz('\DEVICE\TCPIP_'.$$AdapterName), $$IfIndex);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to GetAdapterIndex() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 		return $ret;
@@ -523,7 +544,7 @@ sub GetAdapterIndex
 #######################################################################
 sub IpReleaseAddress
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: IpReleaseAddress(\\\%IP_ADAPTER_INDEX_MAP)';
 	}
@@ -539,7 +560,7 @@ sub IpReleaseAddress
 	# function call
 	my $ret = $IpReleaseAddress->Call($ip_adapter_index_map);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to IpReleaseAddress() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 	}
@@ -572,7 +593,7 @@ sub IpReleaseAddress
 #######################################################################
 sub IpRenewAddress
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: IpRenewAddress(\\\%IP_ADAPTER_INDEX_MAP)';
 	}
@@ -588,7 +609,7 @@ sub IpRenewAddress
 	# function call
 	my $ret = $IpRenewAddress->Call($ip_adapter_index_map);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to IpRenewAddress() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 	}
@@ -631,7 +652,7 @@ sub IpRenewAddress
 #######################################################################
 sub GetTcpTable
 {
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: GetTcpTable(\\\@TCP_TABLE, \$bOrder)';
 	}
@@ -648,9 +669,9 @@ sub GetTcpTable
 	# function call
 	my $ret = $GetTcpTable->Call($pTcpTable, $pdwSize, $bOrder);
 
-	if($ret != ERROR_SUCCESS)
+	if ($ret != ERROR_SUCCESS)
 	{
-		if($ret == ERROR_INSUFFICIENT_BUFFER)
+		if ($ret == ERROR_INSUFFICIENT_BUFFER)
 		{
 			my $multi = int(unpack('L', $pdwSize) / $size) + 1;
 			$size = $size * $multi;
@@ -659,7 +680,7 @@ sub GetTcpTable
 			$pdwSize = pack('L', $size);
 
 			$ret = $GetTcpTable->Call($pTcpTable, $pdwSize, $bOrder);
-			if($ret != ERROR_SUCCESS)
+			if ($ret != ERROR_SUCCESS)
 			{
 				$DEBUG and carp sprintf "GetTcpTable() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 				return $ret;
@@ -678,7 +699,7 @@ sub GetTcpTable
 
 	($pos, $elements) = _shiftunpack(\$pTcpTable, $pos, 4, 'L');
 
-	for(1..$elements)
+	for (1..$elements)
 	{
 		my %hash;
 		my $data;
@@ -739,13 +760,13 @@ sub GetTcpTable
 #######################################################################
 sub AllocateAndGetTcpExTableFromStack
 {
-	unless($AllocateAndGetTcpExTableFromStack)
+	unless ($AllocateAndGetTcpExTableFromStack)
 	{
 		carp 'AllocateAndGetTcpExTableFromStack() function is not available on this platform';
 		return;
 	}
 
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: AllocateAndGetTcpExTableFromStack(\\\@TCP_EX_TABLE, \$bOrder)';
 	}
@@ -761,7 +782,7 @@ sub AllocateAndGetTcpExTableFromStack
 	# function call
 	my $ret = $AllocateAndGetTcpExTableFromStack->Call($pTcpExTable, $bOrder, _GetProcessHeap(), $zero, $flags);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to AllocateAndGetTcpExTableFromStack() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 		return $ret;
@@ -775,7 +796,7 @@ sub AllocateAndGetTcpExTableFromStack
 
 	($pos, $elements) = _shiftunpack(\$TcpExTable, $pos, 4, 'L');
 
-	for(1..$elements)
+	for (1..$elements)
 	{
 		my %hash;
 		my $data;
@@ -795,6 +816,127 @@ sub AllocateAndGetTcpExTableFromStack
 	return $ret;
 }
 
+#######################################################################
+# Win32::IPHelper::GetExtendedTcpTable(\@TCP_EX_TABLE, $bOrder)
+#
+# Retrieves the same list as GetTcpTable()
+# with the addditional ProcessId for each connection
+#
+# Since AllocateAndGetTcpExTableFromStack is deprecated.
+# For Windows Server 2003 SP1, Server 2008, XP SP2, Vista
+#
+#######################################################################
+#
+# Prototype
+# DWORD GetExtendedTcpTable(
+#   __out    PVOID pTcpTable,
+#   __inout  PDWORD pdwSize,
+#   __in     BOOL bOrder,
+#   __in     ULONG ulAf,
+#   __in     TCP_TABLE_CLASS TableClass,
+#  __in      ULONG Reserved
+# );
+#
+# pTcpTable
+#   A pointer to the table structure that contains the filtered TCP endpoints.
+#
+# pdwSize
+#   The estimated size of the structure returned in pTcpTable, in bytes.
+#
+# bOrder
+#   A value that specifies whether the TCP endpoint table should be sorted.
+#
+# ulAf
+#   IPv4 or IPv6. Here it is IPv4.
+#
+# TCP_TABLE_CLASS
+#   The type of the TCP table structure to retrieve. Here it is TCP_TABLE_OWNER_PID_ALL.
+#
+# Reserved
+#   This value must be zero.
+#
+# Return Values
+#   If the function succeeds, the return value is NO_ERROR.
+#   If the function fails, use FormatMessage to obtain the message string for the returned error.
+#
+#######################################################################
+sub GetExtendedTcpTable
+{
+	unless ($GetExtendedTcpTable)
+	{
+		carp '$GetExtendedTcpTable() function is not available on this platform';
+		return;
+	}
+
+	# IPv6
+	# my $nargv = @_;
+	# unless ( $nargv > 1 && $nargv < 4 ) {
+	#     croak 'Usage: $GetExtendedTcpTable(\\\@TCP_EX_TABLE, \$bOrder, [\$ipv6])';
+	# }
+	unless ( @_ == 2 )
+	{
+		croak 'Usage: $GetExtendedTcpTable(\\\@TCP_EX_TABLE, \$bOrder)';
+	}
+	
+	my $TCPTABLE    = shift;
+	my $bOrder      = shift(@_) ? 1 : 0;
+	my $pdwSize     = pack 'L', TABLE_SIZE;
+	my $pTcpExTable = pack 'L@'.TABLE_SIZE, 0;
+	my $ulAf        = shift(@_) ? AF_INET6 : AF_INET; # preparation, AF_INET6 returns different table
+	my $TABLE_CLASS = TCP_TABLE_OWNER_PID_ALL;
+	my $Reserved    = 0;
+
+	# function call
+	my $ret = $GetExtendedTcpTable->Call(
+		$pTcpExTable,
+		$pdwSize,
+		$bOrder,
+		$ulAf,
+		$TABLE_CLASS,
+		$Reserved,
+	);
+
+	if ($ret != NO_ERROR)
+	{
+		$DEBUG and carp sprintf "The call to GetExtendedTcpTable() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
+		return $ret;
+	}
+	
+	# Beware. Not for AF_INET6. Different table structure.
+	# Can't test yet.
+	
+	my ($pos,$elements) = _shiftunpack(\$pTcpExTable,0,4,'L');
+
+	for (1..$elements)
+	{
+		my %hash;
+		my $data;
+		
+		($pos, $data) = _shiftunpack(\$pTcpExTable,$pos,24,'L a4 nx2 a4 nx2 L');
+		
+		$hash{ State      } = $TCP_STATES{$data->[0]};
+		$hash{ LocalAddr  } = inet_ntoa($data->[1]);
+		$hash{ LocalPort  } = $data->[2];
+		$hash{ RemoteAddr } = inet_ntoa($data->[3]);
+		$hash{ RemotePort } = $data->[0] eq 2 ? 0 : $data->[4];
+		$hash{ ProcessId  } = $data->[5];
+		
+		push @$TCPTABLE, \%hash;
+	}
+
+	return $ret;
+}
+
+#
+# wrapper for GetExtendedTcpTable/AllocateAndGetTcpExTableFromStack/GetTcpTable
+#
+sub GetTcpTableAuto
+{
+	$GetExtendedTcpTable && goto &GetExtendedTcpTable;
+	$AllocateAndGetTcpExTableFromStack && goto &AllocateAndGetTcpExTableFromStack;
+	$GetTcpTable && goto &GetTcpTable;
+	carp 'GetTcpTableAuto() function is not available on this platform';
+}
 
 #######################################################################
 # Win32::IPHelper::GetUdpTable(\@UDP_TABLE, $bOrder)
@@ -830,7 +972,7 @@ sub AllocateAndGetTcpExTableFromStack
 #######################################################################
 sub GetUdpTable
 {
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: GetUdp(\\\@UDP_TABLE, \$bOrder)';
 	}
@@ -847,9 +989,9 @@ sub GetUdpTable
 	# function call
 	my $ret = $GetUdpTable->Call($pUdpTable, $pdwSize, $bOrder);
 
-	if($ret != ERROR_SUCCESS)
+	if ($ret != ERROR_SUCCESS)
 	{
-		if($ret == ERROR_INSUFFICIENT_BUFFER)
+		if ($ret == ERROR_INSUFFICIENT_BUFFER)
 		{
 			my $multi = int(unpack('L', $pdwSize) / $size) + 1;
 			$size = $size * $multi;
@@ -858,7 +1000,7 @@ sub GetUdpTable
 			$pdwSize = pack('L', $size);
 
 			$ret = $GetUdpTable->Call($pUdpTable, $pdwSize, $bOrder);
-			if($ret != ERROR_SUCCESS)
+			if ($ret != ERROR_SUCCESS)
 			{
 				$DEBUG and carp sprintf "The call to GetUdpTable() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 				return $ret;
@@ -877,7 +1019,7 @@ sub GetUdpTable
 
 	($pos, $elements) = _shiftunpack(\$pUdpTable, $pos, 4, 'L');
 
-	for(1..$elements)
+	for (1..$elements)
 	{
 		my %hash;
 		my $data;
@@ -922,13 +1064,13 @@ sub GetUdpTable
 #######################################################################
 sub AllocateAndGetUdpExTableFromStack
 {
-	unless($AllocateAndGetUdpExTableFromStack)
+	unless ($AllocateAndGetUdpExTableFromStack)
 	{
 		carp 'AllocateAndGetUdpExTableFromStack() function is not available on this platform';
 		return;
 	}
 
-	if(scalar(@_) ne 2)
+	if (scalar(@_) ne 2)
 	{
 		croak 'Usage: AllocateAndGetUdpExTableFromStack(\\\@UDP_EX_TABLE, \$bOrder)';
 	}
@@ -944,7 +1086,7 @@ sub AllocateAndGetUdpExTableFromStack
 	# function call
 	my $ret = $AllocateAndGetUdpExTableFromStack->Call($pUdpExTable, $bOrder, _GetProcessHeap(), $zero, $flags);
 
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
 		$DEBUG and carp sprintf "The call to AllocateAndGetUdpExTableFromStack() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 		return $ret;
@@ -958,7 +1100,7 @@ sub AllocateAndGetUdpExTableFromStack
 
 	($pos, $elements) = _shiftunpack(\$UdpExTable, $pos, 4, 'L');
 
-	for(1..$elements)
+	for (1..$elements)
 	{
 		my %hash;
 		my $data;
@@ -975,6 +1117,124 @@ sub AllocateAndGetUdpExTableFromStack
 	return $ret;
 }
 
+#######################################################################
+# Win32::IPHelper::GetExtendedUdpTable(\@TCP_EX_TABLE, $bOrder)
+#
+# Retrieves the same list as GetUdpTable()
+# with the addditional ProcessId for each connection
+#
+# Since AllocateAndGetUdpExTableFromStack is deprecated.
+# For Windows Server 2003 SP1, Server 2008, XP SP2, Vista
+#
+#######################################################################
+#
+# Prototype
+# DWORD GetExtendedUdpTable(
+#   __out    PVOID pUdpTable,
+#   __inout  PDWORD pdwSize,
+#   __in     BOOL bOrder,
+#   __in     ULONG ulAf,
+#   __in     UDP_TABLE_CLASS TableClass,
+#   __in     ULONG Reserved
+# );
+#
+# pUdpTable
+#   A pointer to the table structure that contains the filtered UDP endpoints.
+#
+# pdwSize
+#   The estimated size of the structure returned in pUdpTable, in bytes.
+#
+# bOrder
+#   A value that specifies whether the UDP endpoint table should be sorted.
+#
+# ulAf
+#   IPv4 or IPv6. Here it is IPv4.
+#
+# UDP_TABLE_CLASS
+#   The type of the UDP table structure to retrieve. Here it is UDP_TABLE_OWNER_PID.
+#
+# Reserved
+#   This value must be zero.
+#
+# Return Values
+#   If the function succeeds, the return value is NO_ERROR.
+#   If the function fails, use FormatMessage to obtain the message string for the returned error.
+#
+#######################################################################
+sub GetExtendedUdpTable
+{
+	unless ($GetExtendedUdpTable)
+	{
+		carp '$GetExtendedUcpTable() function is not available on this platform';
+		return;
+	}
+
+	# IPv6
+	# my $nargv = @_;
+	# unless ( $nargv > 1 && $nargv < 4 ) {
+	#     croak 'Usage: $GetExtendedUdpTable(\\\@UDP_EX_TABLE, \$bOrder, [\$ipv6])';
+	# }
+	unless ( @_ == 2 )
+	{
+		croak 'Usage: $GetExtendedUdpTable(\\\@UDP_EX_TABLE, \$bOrder)';
+	}
+	
+	my $UDPTABLE    = shift;
+	my $bOrder      = shift(@_) ? 1 : 0;
+	my $pdwSize     = pack 'L', TABLE_SIZE;
+	my $pTcpExTable = pack 'L@'.TABLE_SIZE, 0;
+	my $ulAf        = shift(@_) ? AF_INET6 : AF_INET; # preparation, AF_INET6 returns different table
+	my $TABLE_CLASS = UDP_TABLE_OWNER_PID;
+	my $Reserved    = 0;
+
+	# function call
+	my $ret = $GetExtendedUdpTable->Call(
+		$pTcpExTable,
+		$pdwSize,
+		$bOrder,
+		$ulAf,
+		$TABLE_CLASS,
+		$Reserved,
+	);
+	
+	if ($ret != NO_ERROR)
+	{
+		$DEBUG and carp sprintf "The call to GetExtendedUdpTable() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
+		return $ret;
+	}
+
+	# Beware. Not for AF_INET6. Different table structure.
+	# Can't test yet.
+	
+	my ($pos,$elements) = _shiftunpack(\$pTcpExTable,0,4,'L');
+	
+	for (1..$elements)
+	{
+		my %hash;
+		my $data;
+		
+		($pos,$data) = _shiftunpack(\$pTcpExTable,$pos,12,'a4 nx2 L');
+		
+		$hash{ LocalAddr  } = inet_ntoa($data->[0]);
+		$hash{ LocalPort  } = $data->[1];
+		$hash{ ProcessId  } = $data->[2];
+		
+		push @$UDPTABLE, \%hash;
+	}
+	
+	return $ret;
+}
+
+#
+# wrapper for GetExtendedTcpTable/AllocateAndGetTcpExTableFromStack/GetUdpTable
+#
+sub GetUdpTableAuto
+{    
+	$GetExtendedUdpTable && goto &GetExtendedUdpTable;
+	$AllocateAndGetUdpExTableFromStack && goto &AllocateAndGetUdpExTableFromStack;
+	$GetUdpTable && goto &GetUdpTable;
+	carp 'GetUdpTableAuto() function is not available on this platform';
+}
 
 #######################################################################
 # Win32::IPHelper::GetNetworkParams()
@@ -1006,7 +1266,7 @@ sub AllocateAndGetUdpExTableFromStack
 #######################################################################
 sub GetNetworkParams
 {
-	if(scalar(@_) ne 1)
+	if (scalar(@_) ne 1)
 	{
 		croak 'Usage: GetNetworkParams(\\\%FIXED_INFO)';
 	}
@@ -1022,9 +1282,9 @@ sub GetNetworkParams
 	my $ret = $GetNetworkParams->Call($lpBuffer, $lpSize);
 
 	# check returned value...
-	if($ret != NO_ERROR)
+	if ($ret != NO_ERROR)
 	{
-		if($ret == ERROR_BUFFER_OVERFLOW)
+		if ($ret == ERROR_BUFFER_OVERFLOW)
 		{
 			# initialize area for the buffer content
 			$base_size = unpack("L", $lpSize);
@@ -1032,7 +1292,7 @@ sub GetNetworkParams
 
 			# second call to read data
 			$ret = $GetNetworkParams->Call($lpBuffer, $lpSize);
-			if($ret != NO_ERROR)
+			if ($ret != NO_ERROR)
 			{
 				$DEBUG and carp sprintf "The call to GetNetworkParams() returned %u: %s\n", $ret, Win32::FormatMessage($ret);
 				return $ret;
@@ -1209,7 +1469,7 @@ sub _IP_ADAPTER_INFO
 
 	my $CurrentIpAddress;
 	($pos, $CurrentIpAddress) = _shiftunpack($buffer, $pos, 4, "P40");
-	if($CurrentIpAddress)
+	if ($CurrentIpAddress)
 	{
 		@{ $hash{'CurrentIpAddress'} } = _IP_ADDR_STRING(\$CurrentIpAddress, 0);
 	}
@@ -1229,7 +1489,7 @@ sub _IP_ADAPTER_INFO
 
 	push @array, \%hash;
 
-	if($next)
+	if ($next)
 	{
 		my ($pos, @results) = _IP_ADAPTER_INFO(\$next, 0);
 		push @array, @results;
@@ -1286,7 +1546,7 @@ sub _IP_ADDR_STRING
 
 	push @array, \%hash;
 
-	if($next)
+	if ($next)
 	{
 		my ($pos, @results) = _IP_ADDR_STRING(\$next, 0);
 		push @array, @results;
@@ -1382,7 +1642,7 @@ sub _IP_INTERFACE_INFO
 
 	($pos, $hash{'NumAdapters'}) = _shiftunpack($buffer, $pos, 4, "l");
 
-	for(my $cnt=0; $cnt < $hash{'NumAdapters'}; $cnt++)
+	for (my $cnt=0; $cnt < $hash{'NumAdapters'}; $cnt++)
 	{
 		my %map;
 		($pos, %map) = _IP_ADAPTER_INDEX_MAP($buffer, $pos);
@@ -1436,7 +1696,7 @@ sub _FIXED_INFO{
 	
 	my $CurrentDnsServer;
 	($pos, $CurrentDnsServer) = _shiftunpack($buffer, $pos, 4, "P40");
-	if($CurrentDnsServer)
+	if ($CurrentDnsServer)
 	{
     @{ $hash{'CurrentDnsServer'} } = _IP_ADDR_STRING(\$CurrentDnsServer, 0);
   }
@@ -1479,7 +1739,7 @@ sub _shiftunpack
 
 	$position += $size;
 
-	if(scalar(@values) > 1)
+	if (scalar(@values) > 1)
 	{
 		return($position, \@values);
 	}
@@ -1550,7 +1810,7 @@ sub _debugbuffer
 	foreach my $i (@data)
 	{
 		my $char = '';
-		if(32 <= $i  and $i < 127)
+		if (32 <= $i  and $i < 127)
 		{
 			$char = chr($i);
 		}
@@ -1639,9 +1899,13 @@ Win32::IPHelper - Perl wrapper for Win32 IP Helper functions and structures.
 
  $ret = Win32::IPHelper::AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE, $bOrder);
 
+ $ret = Win32::IPHelper::GetExtendedTcpTable(\@TCP_EX_TABLE, $bOrder);
+
  $ret = Win32::IPHelper::GetUdpTable(\@UDP_TABLE, $bOrder);
 
  $ret = Win32::IPHelper::AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE, $bOrder);
+
+ $ret = Win32::IPHelper::GetExtendedUdpTable(\@UDP_EX_TABLE, $bOrder);
 
 =head1 DESCRIPTION
 
@@ -1684,7 +1948,13 @@ Microsoft Windows 2000
 Microsoft Windows XP
 
 =item *
-Microsoft Windows .NET Server 2003 family
+Microsoft Windows Vista
+
+=item *
+Microsoft Windows Server 2003 family
+
+=item *
+Microsoft Windows Server 2008 family
 
 =back
 
@@ -1695,6 +1965,7 @@ If an IP Helper function is called on a platform that does not support the funct
 For more specific information about which operating systems support a particular function, refer to the Requirements sections in the documentation.
 
 The complete SDK Reference documentation is available online through Microsoft MSDN Library (http://msdn.microsoft.com/library/default.asp)
+
 
 =head2 EXPORT
 
@@ -1715,7 +1986,7 @@ B<Example>
   my %IP_INTERFACE_INFO;
   $ret = Win32::IPHelper::GetInterfaceInfo(\%IP_INTERFACE_INFO);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\%IP_INTERFACE_INFO], [qw(IP_INTERFACE_INFO)]);
   }
@@ -1754,7 +2025,7 @@ B<Examples>
   my @IP_ADAPTER_INFO;
   $ret = Win32::IPHelper::GetAdaptersInfo(\@IP_ADAPTER_INFO);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\@IP_ADAPTER_INFO], [qw(IP_ADAPTER_INFO)]);
   }
@@ -1800,7 +2071,7 @@ B<Example>
 
   $ret = Win32::IPHelper::GetAdapterIndex(\$AdapterName,\$IfIndex);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     printf "Index for '%s' interface is %u\n", $AdapterName, $IfIndex;
   }
@@ -1840,12 +2111,12 @@ B<Example>
 
   $ret = Win32::IPHelper::GetAdapterIndex(\$AdapterName,\$IfIndex);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     my %MIB_IFROW;
     $ret = Win32::IPHelper::GetIfEntry($IfIndex,\%MIB_IFROW);
 
-    if($ret == 0)
+    if ($ret == 0)
 	{
       print Data::Dumper->Dump([\%MIB_IFROW], [qw(MIB_IFROW)]);
     }
@@ -1889,7 +2160,7 @@ B<Example>
 
   $ret = Win32::IPHelper::GetAdapterIndex(\$AdapterName,\$IfIndex);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     my $Address = '192.168.1.10';
     my $IpMask = '255.255.255.0';
@@ -1897,7 +2168,7 @@ B<Example>
     my $NTEInstance;
     $ret = Win32::IPHelper::AddIPAddress($Address,$IpMask,$IfIndex,\$NTEContext,\$NTEInstance);
 
-    if($ret == 0)
+    if ($ret == 0)
 	{
       printf "Address has been added successfully with Context=%u\n", $NTEContext;
     }
@@ -1943,7 +2214,7 @@ B<Example>
   my $NTEContext = 2;
   $ret = Win32::IPHelper::DeleteIPAddress($NTEContext);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     printf "Address has been deleted successfully from Context=%u\n", $NTEContext;
   }
@@ -1977,13 +2248,13 @@ B<Example>
   my %IP_INTERFACE_INFO;
   $ret = Win32::IPHelper::GetInterfaceInfo(\%IP_INTERFACE_INFO);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };
 
     $ret = Win32::IPHelper::IpReleaseAddress(\%AdapterInfo);
 
-    if($ret == 0)
+    if ($ret == 0)
     {
       print "Address has been released successfully\n";
     }
@@ -2022,13 +2293,13 @@ B<Example>
   my %IP_INTERFACE_INFO;
   $ret = Win32::IPHelper::GetInterfaceInfo(\%IP_INTERFACE_INFO);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     my %AdapterInfo = %{ $IP_INTERFACE_INFO{'Adapters'}[0] };
 
     $ret = Win32::IPHelper::IpRenewAddress(\%AdapterInfo);
 
-    if($ret == 0)
+    if ($ret == 0)
     {
       print "Address has been renewed successfully\n";
     }
@@ -2070,7 +2341,7 @@ B<Example>
 
   $ret = Win32::IPHelper::GetTcpTable(\@TCP_TABLE, $bOrder);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\@TCP_TABLE], [qw(TCP_TABLE)]);
   }
@@ -2107,7 +2378,7 @@ B<Example>
 
   $ret = Win32::IPHelper::AllocateAndGetTcpExTableFromStack(\@TCP_EX_TABLE, $bOrder);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\@TCP_EX_TABLE], [qw(TCP_EX_TABLE)]);
   }
@@ -2134,6 +2405,86 @@ Header: Undeclared.
 Library: Iphlpapi.dll.
 
 
+=head2 GetExtendedTcpTable(\@TCP_EX_TABLE,$bOrder)
+
+The GetExtendedTcpTable function retrieves the TCP connection table with the additional ProcessId.
+
+B<Example>
+
+  use Win32::IPHelper;
+  use Data::Dumper;
+
+  my @TCP_EX_TABLE;
+  my $bOrder = 1;
+
+  $ret = Win32::IPHelper::GetExtendedTcpTable(\@TCP_EX_TABLE, $bOrder);
+
+  if($ret == 0)
+  {
+    print Data::Dumper->Dump([\@TCP_EX_TABLE], [qw(TCP_EX_TABLE)]);
+  }
+  else
+  {
+    printf "GetExtendedTcpTable() error %u: %s\n", $ret, Win32::FormatMessage($ret);
+  }
+
+B<Return Values>
+
+If the function succeeds, the return value is 0.
+
+If the function fails, the error code can be decoded with Win32::FormatMessage($ret).
+
+B<Remarks>
+
+The GetExtendedTcpTable function is available in Windows Server 2003 SP1,
+Sever 2008, XP SP2 and Vista.
+
+B<Requirements>
+
+Client: Requires Windows XP or Vista.
+Server: Requires Windows Server 2003 SP2 or Server 2008.
+Library: Iphlpapi.dll.
+
+
+=head2 GetTcpTableAuto(\@TCP_EX_TABLE,$bOrder)
+
+The GetExtendedTcpTable function retrieves the TCP connection table with the additional ProcessId (if supported)
+
+B<Example>
+
+  use Win32::IPHelper;
+  use Data::Dumper;
+
+  my @TCP_EX_TABLE;
+  my $bOrder = 1;
+
+  $ret = Win32::IPHelper::GetTcpTableAuto(\@TCP_EX_TABLE, $bOrder);
+
+  if($ret == 0)
+  {
+    print Data::Dumper->Dump([\@TCP_EX_TABLE], [qw(TCP_EX_TABLE)]);
+  }
+  else
+  {
+    printf "GetTcpTableAuto() error %u: %s\n", $ret, Win32::FormatMessage($ret);
+  }
+
+B<Return Values>
+
+If the function succeeds, the return value is 0.
+
+If the function fails, the error code can be decoded with Win32::FormatMessage($ret).
+
+B<Remarks>
+
+The GetTcpTableAuto function is a wrapper to functions GetExtendedTcpTable, AllocateAndGetTcpExTableFromStack
+and GetTcpTable; the first supported function is used to retrieve the best available detail from TCP connection table.   
+
+B<Requirements>
+
+Library: Iphlpapi.dll.
+
+
 =head2 GetUdpTable(\@UDP_TABLE,$bOrder)
 
 The GetUdpTable function retrieves the User Datagram Protocol (UDP) listener table.
@@ -2148,7 +2499,7 @@ B<Example>
 
   $ret = Win32::IPHelper::GetTcpTable(\@UDP_TABLE, $bOrder);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\@UDP_TABLE], [qw(UDP_TABLE)]);
   }
@@ -2185,7 +2536,7 @@ B<Example>
 
   $ret = Win32::IPHelper::AllocateAndGetUdpExTableFromStack(\@UDP_EX_TABLE, $bOrder);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\@UDP_EX_TABLE], [qw(UDP_EX_TABLE)]);
   }
@@ -2211,6 +2562,89 @@ Server: Requires Windows Server 2003.
 Header: Undeclared.
 Library: Iphlpapi.dll.
 
+
+=head2 GetExtendedUdpTable(\@UDP_EX_TABLE,$bOrder)
+
+The GetExtendedUdpTable function retrieves the User Datagram Protocol (UDP) listener
+table with the additional ProcessId.
+
+B<Example>
+
+  use Win32::IPHelper;
+  use Data::Dumper;
+
+  my @UDP_EX_TABLE;
+  my $bOrder = 1;
+
+  $ret = Win32::IPHelper::GetExtendedUdpTable(\@UDP_EX_TABLE, $bOrder);
+
+  if($ret == 0)
+  {
+    print Data::Dumper->Dump([\@UDP_EX_TABLE], [qw(UDP_EX_TABLE)]);
+  }
+  else
+  {
+    printf "GetExtendedUdpTable() error %u: %s\n", $ret, Win32::FormatMessage($ret);
+  }
+
+B<Return Values>
+
+If the function succeeds, the return value is 0.
+
+If the function fails, the error code can be decoded with Win32::FormatMessage($ret).
+
+B<Remarks>
+
+The GetExtendedUdpTable function is available in Windows Server 2003 SP1,
+Sever 2008, XP SP2 and Vista.
+
+B<Requirements>
+
+Client: Requires Windows XP or Vista.
+Server: Requires Windows Server 2003 SP2 or Server 2008.
+Library: Iphlpapi.dll.
+
+
+=head2 GetUdpTableAuto(\@UDP_EX_TABLE,$bOrder)
+
+The GetUdpTableAuto function retrieves the User Datagram Protocol (UDP) listener
+table with the additional ProcessId (if supported).
+
+B<Example>
+
+  use Win32::IPHelper;
+  use Data::Dumper;
+
+  my @UDP_EX_TABLE;
+  my $bOrder = 1;
+
+  $ret = Win32::IPHelper::GetUdpTableAuto(\@UDP_EX_TABLE, $bOrder);
+
+  if($ret == 0)
+  {
+    print Data::Dumper->Dump([\@UDP_EX_TABLE], [qw(UDP_EX_TABLE)]);
+  }
+  else
+  {
+    printf "GetUdpTableAuto() error %u: %s\n", $ret, Win32::FormatMessage($ret);
+  }
+
+B<Return Values>
+
+If the function succeeds, the return value is 0.
+
+If the function fails, the error code can be decoded with Win32::FormatMessage($ret).
+
+B<Remarks>
+
+The GetUdpTableAuto function is a wrapper to functions GetExtendedUdpTable, AllocateAndGetUdpExTableFromStack
+and GetUdpTable; the first supported function is used to retrieve the best available detail from UDP listener table.   
+
+B<Requirements>
+
+Library: Iphlpapi.dll.
+
+
 =head2 GetNetworkParams(\%FIXED_INFO)
 
 The GetNetworkParams function retrieves network parameters for the local computer.
@@ -2224,7 +2658,7 @@ B<Example>
 
   $ret = Win32::IPHelper::GetNetworkParams(\%FIXED_INFO);
 
-  if($ret == 0)
+  if ($ret == 0)
   {
     print Data::Dumper->Dump([\%FIXED_INFO], [qw(FIXED_INFO)]);
   }
@@ -2246,11 +2680,14 @@ Server: Requires Windows Server 2003 or Windows 2000 Server.
 Header: Undeclared.
 Library: Iphlpapi.dll.
 
+
 =head1 CREDITS
 
 Thanks to Aldo Calpini for the powerful Win32::API module that makes this thing work.
 
-Thanks to Hanno Stock (HANSTO) for the GetNetworkParams and _FIXED_INFO wrapper and helper.
+Thanks to Hanno Stock (HANSTO) for the GetNetworkParams() and _FIXED_INFO() wrapper and helper.
+
+Thanks to Peter Arnhold for the GetExtendedTcpTable() and GetExtendedUdpTable() functions.
 
 =head1 AUTHOR
 

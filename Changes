@@ -18,3 +18,6 @@ Revision history for Perl extension Win32::IPHelper.
 
 0.05  Tue May 23 07:25:00 2006
 	- added GetNetworkParams() and _FIXED_INFO(), thanks to Hanno Stock (HANSTO).
+
+0.06  Wed Jul 23 23:04:00 2008
+	- added GetExtendedTcpTable(), GetExtendedUdpTable() GetTcpTableAuto() and GetUdpTableAuto(), thanks to Peter Arnhold.
