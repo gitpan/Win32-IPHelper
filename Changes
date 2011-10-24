@@ -24,3 +24,6 @@ Revision history for Perl extension Win32::IPHelper.
 
 0.07  Mon Oct 17 08:48:00 2011
 	- fix for Bug #59790 (A few functions are not valid in a Perl64 environment), as proposed by contributors in the thread. Thanks.
+
+0.08  Mon Oct 24 09:19:00 2011
+	- fix for CPAN tester (http://www.cpantesters.org/cpan/report/007efdfa-6c0e-1014-8ca5-0789a94ceed8)
